@@ -133,6 +133,8 @@ class gridboxControllerStore extends JControllerForm
         }
         $data = $this->input->post->getArray([]);
         $data['id'] = $id;
+        // AstoSoft
+        $data['username'] = $data['email1'];
         if (isset($data['image'])) {
             $model = $this->getModel('account');
             $model->saveAthor($id, $data['image'], $data['description'], $data['title']);
