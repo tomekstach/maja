@@ -6,25 +6,35 @@
  * @license   http://www.gnu.org/licenses/gpl.html GNU/GPL
  */
 
+namespace Balbooa\Component\Gridbox\Site\Controller;
+
 defined('_JEXEC') or die;
 
-// import Joomla controllerform library
-jimport('joomla.application.component.controllerform');
-jimport('joomla.filesystem.file');
-jimport('joomla.filesystem.folder');
+use Balbooa\Component\Gridbox\Site\Helper\GridboxHelper;
+use Joomla\CMS\Component\ComponentHelper;
+use Joomla\CMS\Factory;
+use Joomla\CMS\Language\Text;
+use Joomla\CMS\MVC\Controller\FormController;
+use Joomla\CMS\String\PunycodeHelper;
+use Joomla\CMS\Uri\Uri;
+use Joomla\CMS\User\User;
+use Joomla\Component\Users\Site\Model\ProfileModel;
 
-class gridboxControllerStore extends JControllerForm
+class StoreController extends FormController
 {
-    public function getModel($name = '', $prefix = '', $config = array('ignore_request' => true))
+    /**
+     * @return Balbooa\Component\Gridbox\Site\Model
+     */
+    public function getModel($name = 'Store', $prefix = 'Site', $config = ['ignore_request' => false])
     {
-        return parent::getModel($name, $prefix, array('ignore_request' => false));
+        return parent::getModel($name, $prefix, $config);
     }
 
     public function setCurrency()
     {
         $currency = $this->input->get('currency', '', 'string');
         $time = time() + 60 * 60 * 24 * 30;
-        gridboxHelper::setcookie('gridbox-currency', $currency, $time);
+        GridboxHelper::setcookie('gridbox-currency', $currency, $time);
         exit;
     }
 
@@ -72,20 +82,23 @@ class gridboxControllerStore extends JControllerForm
 
     public function register()
     {
-        $response = new stdClass();
+        $response = new \stdClass();
         // AstoSoft - start
         $email = $this->input->post->get('email1', '', 'string');
         $this->input->post->set('username', $email);
         // AstoSoft - end
 
-        if (gridboxHelper::$store->checkout->registration) {
-            $app = JFactory::getApplication();
+        if (GridboxHelper::$store->checkout->registration) {
+            /**
+             * @var Joomla\CMS\Application\SiteApplication
+             */
+            $app = Factory::getApplication();
             $data = $this->input->post->getArray([]);
-            $params = JComponentHelper::getParams('com_users');
+            $params = ComponentHelper::getParams('com_users');
             $data['groups'][] = $params->get('new_usertype', $params->get('guest_usergroup', 1));
-            $data['email'] = JStringPunycode::emailToPunycode($data['email1']);
+            $data['email'] = PunycodeHelper::emailToPunycode($data['email1']);
             $data['password'] = $data['password1'];
-            $user = new JUser;
+            $user = new User();
             $response->status = $user->bind($data);
             if ($response->status) {
                 $response->status = $user->save();
@@ -109,9 +122,12 @@ class gridboxControllerStore extends JControllerForm
 
     public function login()
     {
-        $app = JFactory::getApplication();
-        $response = new stdClass();
-        $response->message = JText::_('LOGIN_ERROR');
+        /**
+         * @var Joomla\CMS\Application\SiteApplication
+         */
+        $app = Factory::getApplication();
+        $response = new \stdClass();
+        $response->message = Text::_('LOGIN_ERROR');
         $options = [];
         $options['remember'] = $this->input->get('remember', 0, 'int') == 1;
         $credentials = [];
@@ -127,14 +143,12 @@ class gridboxControllerStore extends JControllerForm
 
     public function saveUserProfile()
     {
-        $id = JFactory::getUser()->id;
+        $id = Factory::getUser()->id;
         if (empty($id)) {
             exit;
         }
         $data = $this->input->post->getArray([]);
         $data['id'] = $id;
-        // AstoSoft
-        $data['username'] = $data['email1'];
         if (isset($data['image'])) {
             $model = $this->getModel('account');
             $model->saveAthor($id, $data['image'], $data['description'], $data['title']);
@@ -142,23 +156,26 @@ class gridboxControllerStore extends JControllerForm
             unset($data['description']);
             unset($data['title']);
         }
-        jimport('joomla.application.component.model');
-        JModelLegacy::addIncludePath(JPATH_SITE . '/components/com_users/models');
-        $model = JModelLegacy::getInstance('Profile', 'UsersModel');
+
+        $model = new ProfileModel();
         $model->save($data);
         exit;
     }
 
     public function logout()
     {
-        JFactory::getApplication()->logout();
-        header('Location: ' . JUri::root());
+        /**
+         * @var Joomla\CMS\Application\SiteApplication
+         */
+        $app = Factory::getApplication();
+        $app->logout();
+        header('Location: ' . Uri::root());
         exit();
     }
 
     public function getTaxCountries()
     {
-        $countries = gridboxHelper::getTaxCountries();
+        $countries = GridboxHelper::getTaxCountries();
         $str = json_encode($countries);
         print_r($str);exit;
     }
@@ -196,49 +213,45 @@ class gridboxControllerStore extends JControllerForm
 
     public function setCartShipping()
     {
-        $input = JFactory::getApplication()->input;
         $id = $this->input->get('id', 0, 'int');
         $cart = $this->input->cookie->get('gridbox_store_cart', 0, 'int');
         $model = $this->getModel();
-        $obj = $model->setCartShipping($id, $cart);
+        $model->setCartShipping($id, $cart);
         exit;
     }
 
     public function setCartPayment()
     {
-        $input = JFactory::getApplication()->input;
         $id = $this->input->get('id', 0, 'int');
         $cart = $this->input->cookie->get('gridbox_store_cart', 0, 'int');
         $model = $this->getModel();
-        $obj = $model->setCartPayment($id, $cart);
+        $model->setCartPayment($id, $cart);
         exit;
     }
 
     public function setCustomerInfo()
     {
-        $input = JFactory::getApplication()->input;
         $id = $this->input->get('id', 0, 'int');
         $value = $this->input->get('value', '', 'string');
         $cart = $this->input->cookie->get('gridbox_store_cart', 0, 'int');
         $model = $this->getModel();
-        $obj = $model->setCustomerInfo($id, $value, $cart);
+        $model->setCustomerInfo($id, $value, $cart);
         exit;
     }
 
     public function getWishlistAuthenticationMessage()
     {
-        $obj = new stdClass();
-        $obj->status = false;
-        $obj->message = JText::_('PLEASE_SIGN_IN_TO_MOVE_WISHLIST');
-
-        return $obj;
+        return (object) [
+            'status' => false,
+            'message' => Text::_('PLEASE_SIGN_IN_TO_MOVE_WISHLIST'),
+        ];
     }
 
     public function addPostToWishlist()
     {
         $id = $this->input->get('id', 0, 'int');
-        $wishlist = gridboxHelper::getWishlistId();
-        if (gridboxHelper::$store->wishlist->login && JFactory::getUser()->id == 0) {
+        $wishlist = GridboxHelper::getWishlistId();
+        if (GridboxHelper::$store->wishlist->login && Factory::getUser()->id == 0) {
             $obj = $this->getWishlistAuthenticationMessage();
         } else {
             $model = $this->getModel();
@@ -251,7 +264,6 @@ class gridboxControllerStore extends JControllerForm
 
     public function addPostToCart()
     {
-        $input = JFactory::getApplication()->input;
         $id = $this->input->get('id', 0, 'int');
         $cart = $this->input->cookie->get('gridbox_store_cart', 0, 'int');
         $model = $this->getModel();
@@ -263,7 +275,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function deleteStoreBadge()
     {
-        gridboxHelper::checkUserEditLevel();
+        GridboxHelper::checkUserEditLevel();
         $id = $this->input->get('id', 0, 'int');
         $model = $this->getModel();
         $model->deleteStoreBadge($id);
@@ -272,8 +284,8 @@ class gridboxControllerStore extends JControllerForm
 
     public function updateStoreBadge()
     {
-        gridboxHelper::checkUserEditLevel();
-        $badge = new stdClass();
+        GridboxHelper::checkUserEditLevel();
+        $badge = new \stdClass();
         $badge->id = $this->input->get('id', 0, 'int');
         $badge->title = $this->input->get('title', '', 'string');
         $badge->color = $this->input->get('color', '#1da6f4', 'string');
@@ -306,7 +318,7 @@ class gridboxControllerStore extends JControllerForm
         $id = $this->input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->pagseguroCallback($id, $transactionCode);
-        echo JUri::root() . "index.php?option=com_gridbox&task=store.setOrder&time=" . time();
+        echo Uri::root() . "index.php?option=com_gridbox&task=store.setOrder&time=" . time();
         exit;
     }
 
@@ -375,7 +387,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function klarnaCallback()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $order_id = $input->get('order_id', '', 'string');
         $model = $this->getModel();
         $model->klarnaCallback($order_id);
@@ -384,7 +396,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function submitLiqpay()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->submitLiqpay($id);
@@ -392,7 +404,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function submitBarion()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->submitBarion($id);
@@ -400,7 +412,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function submitSquare()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->submitSquare($id);
@@ -408,7 +420,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function submitDotpay()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->submitDotpay($id);
@@ -416,7 +428,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function submitPayfast()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->submitPayfast($id);
@@ -432,7 +444,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function submitMono()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->submitMono($id);
@@ -440,7 +452,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function submitMollie()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->submitMollie($id);
@@ -448,7 +460,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function submitRobokassa()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->submitRobokassa($id);
@@ -456,7 +468,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function submitPayupl()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->submitPayupl($id);
@@ -464,7 +476,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function submitPagseguro()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->submitPagseguro($id);
@@ -472,7 +484,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function submitKlarna()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->submitKlarna($id);
@@ -480,7 +492,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function submitYandexKassa()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->submitYandexKassa($id);
@@ -488,7 +500,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function submit2checkout()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $model = $this->getModel();
         $model->submit2checkout($id);
@@ -496,7 +508,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function stripeCharges()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->cookie->get('gridbox_store_order', 0, 'int');
         $payment_id = $input->get('id', 0, 'int');
         $model = $this->getModel();
@@ -527,31 +539,32 @@ class gridboxControllerStore extends JControllerForm
 
     public function createOrder()
     {
-        if (gridboxHelper::$store->checkout->login && !gridboxHelper::$store->checkout->guest && empty(JFactory::getUser()->id)) {
-            $obj = new stdClass();
+        if (GridboxHelper::$store->checkout->login
+            && !GridboxHelper::$store->checkout->guest
+            && empty(Factory::getUser()->id)) {
+            $obj = new \stdClass();
             $obj->denied = true;
             $str = json_encode($obj);
             print_r($str);exit;
         }
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $post = $input->post->getArray([]);
         $id = $input->cookie->get('gridbox_store_cart', 0, 'int');
         $model = $this->getModel();
         $order = $model->createOrder($post, $id);
-        //$order->url = gridboxHelper::getStoreSystemUrl('thank-you-page');
-        $order->url = JUri::root() . "index.php?option=com_gridbox&task=store.setOrder&time=" . time();
+        $order->url = Uri::root() . "index.php?option=com_gridbox&task=store.setOrder&time=" . time();
         $str = json_encode($order);
         print_r($str);exit;
     }
 
     public function setOrder()
     {
-        gridboxHelper::setOrder();
+        GridboxHelper::setOrder();
     }
 
     public function getPaymentOptions()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $payment = $input->get('payment', 0, 'int');
         $model = $this->getModel();
         $obj = $model->getPaymentOptions($payment);
@@ -561,16 +574,16 @@ class gridboxControllerStore extends JControllerForm
 
     public function removeProductFromCart()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $product_id = $input->get('id', 0, 'int');
         $cart_id = $input->cookie->get('gridbox_store_cart', 0, 'int');
-        gridboxHelper::removeProductFromCart($product_id, $cart_id);
+        GridboxHelper::removeProductFromCart($product_id, $cart_id);
         exit;
     }
 
     public function applyPromoCode()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $model = $this->getModel();
         $promo = $input->get('promo', '', 'string');
         $id = $input->cookie->get('gridbox_store_cart', 0, 'int');
@@ -580,7 +593,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function getStoreCart()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $view = $input->get('view', '', 'string');
         $id = $input->cookie->get('gridbox_store_cart', 0, 'int');
         $model = $this->getModel();
@@ -590,7 +603,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function clearWishlist()
     {
-        $id = gridboxHelper::getWishlistId();
+        $id = GridboxHelper::getWishlistId();
         $model = $this->getModel();
         $model->clearWishlist($id);
         $this->getWishlist();
@@ -598,7 +611,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function removeProductFromWishlist()
     {
-        $id = gridboxHelper::getWishlistId();
+        $id = GridboxHelper::getWishlistId();
         $product_id = $this->input->get('id', 0, 'int');
         $model = $this->getModel();
         $model->clearWishlist($id, $product_id);
@@ -618,7 +631,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function removeExtraOptionWishlist()
     {
-        $id = gridboxHelper::getWishlistId();
+        $id = GridboxHelper::getWishlistId();
         $product_id = $this->input->get('id', 0, 'int');
         $key = $this->input->get('key', '', 'string');
         $field_id = $this->input->get('field_id', 0, 'int');
@@ -629,7 +642,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function moveProductFromWishlist()
     {
-        $id = gridboxHelper::getWishlistId();
+        $id = GridboxHelper::getWishlistId();
         $product_id = $this->input->get('id', 0, 'int');
         $cart_id = $this->input->cookie->get('gridbox_store_cart', 0, 'int');
         $model = $this->getModel();
@@ -639,9 +652,9 @@ class gridboxControllerStore extends JControllerForm
 
     public function moveProductsFromWishlist()
     {
-        $id = gridboxHelper::getWishlistId();
+        $id = GridboxHelper::getWishlistId();
         $cart_id = $this->input->cookie->get('gridbox_store_cart', 0, 'int');
-        $products = gridboxHelper::getStoreWishlistProducts($id);
+        $products = GridboxHelper::getStoreWishlistProducts($id);
         $model = $this->getModel();
         foreach ($products as $key => $product) {
             $model->moveProductFromWishlist($id, $product->id, $cart_id);
@@ -652,7 +665,7 @@ class gridboxControllerStore extends JControllerForm
     public function getWishlist()
     {
         $view = $this->input->get('view', '', 'string');
-        $id = gridboxHelper::getWishlistId();
+        $id = GridboxHelper::getWishlistId();
         $model = $this->getModel();
         $out = $model->getWishlistHTML($view, $id);
         echo $out;exit;
@@ -662,15 +675,21 @@ class gridboxControllerStore extends JControllerForm
     {
         $id = $this->input->get('id', 0, 'int');
         $variation = $this->input->get('variation', '', 'string');
-        $wishlist = gridboxHelper::getWishlistId();
+        $wishlist = GridboxHelper::getWishlistId();
         $extra_options = $this->input->get('extra_options', '', 'string');
         $cart_id = $this->input->cookie->get('gridbox_store_cart', 0, 'int');
-        if (gridboxHelper::$store->wishlist->login && JFactory::getUser()->id == 0) {
+        $booking = $this->input->get('booking', '{}', 'string');
+        if (GridboxHelper::$store->wishlist->login && Factory::getUser()->id == 0) {
             $obj = $this->getWishlistAuthenticationMessage();
         } else {
             $model = $this->getModel();
             $attachments = $model->getAttachments($id, $cart_id);
-            $obj = $model->addProductToWishlist($id, $wishlist, $variation, $extra_options, $attachments);
+            $obj = $model->addProductToWishlist($id,
+                $wishlist,
+                $variation,
+                $extra_options,
+                $attachments,
+                $booking);
         }
         $str = json_encode($obj);
         echo $str;
@@ -693,38 +712,46 @@ class gridboxControllerStore extends JControllerForm
 
     public function addProductToCart()
     {
-        $input = JFactory::getApplication()->input;
-        $id = $input->get('id', 0, 'int');
-        $variation = $input->get('variation', '', 'string');
-        $quantity = $input->get('quantity', 0, 'int');
-        $cart = $input->cookie->get('gridbox_store_cart', 0, 'int');
-        $extra_options = $input->get('extra_options', '{}', 'string');
-        $renew_id = $input->get('renew_id', 0, 'int');
-        $upgrade_id = $input->get('upgrade_id', 0, 'int');
-        $plan_key = $input->get('plan_key', '', 'string');
+        $id = $this->input->get('id', 0, 'int');
+        $variation = $this->input->get('variation', '', 'string');
+        $quantity = $this->input->get('quantity', 0, 'int');
+        $cart = $this->input->cookie->get('gridbox_store_cart', 0, 'int');
+        $extra_options = $this->input->get('extra_options', '{}', 'string');
+        $booking = $this->input->get('booking', '{}', 'string');
+        $renew_id = $this->input->get('renew_id', 0, 'int');
+        $upgrade_id = $this->input->get('upgrade_id', 0, 'int');
+        $plan_key = $this->input->get('plan_key', '', 'string');
         $model = $this->getModel();
         $attachments = $model->getAttachments($id, $cart);
-        $model->addProductToCart($id, $cart, $quantity, $variation, $extra_options, $renew_id, $plan_key, $upgrade_id, $attachments);
+        $model->addProductToCart($id,
+            $cart,
+            $quantity,
+            $variation,
+            $extra_options,
+            $renew_id,
+            $plan_key,
+            $upgrade_id,
+            $attachments,
+            $booking);
         exit;
     }
 
     public function removeAttachment()
     {
-        $db = JFactory::getDbo();
-        $input = JFactory::getApplication()->input;
-        $id = $input->post->get('id', 0, 'int');
-        $cart = $input->cookie->get('gridbox_store_cart', 0, 'int');
-        gridboxHelper::$storeHelper->removeAttachment($id, $cart);
+        $id = $this->input->post->get('id', 0, 'int');
+        $is_admin = $this->input->post->get('is_admin', 0, 'int');
+        $cart = $is_admin == 1 ? 0 : $this->input->cookie->get('gridbox_store_cart', 0, 'int');
+        GridboxHelper::$storeHelper->removeAttachment($id, $cart);
         exit;
     }
 
     public function uploadAttachmentFile()
     {
-        $input = JFactory::getApplication()->input;
         $file = $_FILES['file'];
-        $id = $input->post->get('id', 0, 'int');
-        $option_id = $input->post->get('option_id', 0, 'int');
-        $cart = $input->cookie->get('gridbox_store_cart', 0, 'int');
+        $id = $this->input->post->get('id', 0, 'int');
+        $option_id = $this->input->post->get('option_id', 0, 'int');
+        $is_admin = $this->input->post->get('is_admin', 0, 'int');
+        $cart = $is_admin == 1 ? 0 : $this->input->cookie->get('gridbox_store_cart', 0, 'int');
         $model = $this->getModel();
         $obj = $model->uploadAttachmentFile($id, $cart, $file, $option_id);
         $str = json_encode($obj);
@@ -744,7 +771,7 @@ class gridboxControllerStore extends JControllerForm
 
     public function updateProductQuantity()
     {
-        $input = JFactory::getApplication()->input;
+        $input = Factory::getApplication()->input;
         $id = $input->get('id', 0, 'int');
         $quantity = $input->get('quantity', 0, 'int');
         $cart = $input->cookie->get('gridbox_store_cart', 0, 'int');
@@ -784,13 +811,19 @@ class gridboxControllerStore extends JControllerForm
 
     public function sendReminder()
     {
-        gridboxHelper::$storeHelper->sendReminder();
+        GridboxHelper::$storeHelper->sendReminder();
         exit;
     }
 
     public function sendDelayEmails()
     {
-        gridboxHelper::$storeHelper->sendDelayEmail();
+        GridboxHelper::$storeHelper->sendDelayEmail();
+        exit;
+    }
+
+    public function sendAppointmentReminder()
+    {
+        GridboxHelper::$storeHelper->sendAppointmentReminder();
         exit;
     }
 }
